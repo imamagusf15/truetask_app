@@ -1,6 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:truetask_app/models/task.dart';
+import 'package:truetask_app/models/workspace.dart';
+import 'package:truetask_app/screen/login_page.dart';
+import 'package:truetask_app/services/fetchWorkspace.dart';
+import 'package:truetask_app/viewmodels/authUser.dart';
+import 'package:truetask_app/viewmodels/getTask.dart';
+import 'package:truetask_app/viewmodels/getWorkspace.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -12,11 +22,14 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage>
     with SingleTickerProviderStateMixin {
   TabController? _tabController;
-  final GlobalKey<ScaffoldState> _scaffoldKey = new GlobalKey<ScaffoldState>();
+
+  String? userToken;
+  final _user = AuthUser();
 
   @override
   void initState() {
     _tabController = TabController(length: 2, vsync: this);
+    _checkToken();
     super.initState();
   }
 
@@ -24,6 +37,12 @@ class _DashboardPageState extends State<DashboardPage>
   void dispose() {
     super.dispose();
     _tabController!.dispose();
+  }
+
+  _checkToken() async {
+    SharedPreferences localStorage = await SharedPreferences.getInstance();
+    var token = localStorage.getString('token');
+    print(token);
   }
 
   @override
@@ -49,12 +68,22 @@ class _DashboardPageState extends State<DashboardPage>
       ),
       drawer: Drawer(
         child: ListView(
-          children: const [
-            DrawerHeader(
+          children: [
+            const DrawerHeader(
               decoration: BoxDecoration(
                 color: Colors.blue,
               ),
               child: Text('test'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text("Logout"),
+              onTap: () {
+                _user.logout();
+                Navigator.of(context).pushReplacement(MaterialPageRoute(
+                  builder: (context) => const LoginPage(),
+                ));
+              },
             ),
           ],
         ),
@@ -122,10 +151,7 @@ class _DashboardPageState extends State<DashboardPage>
               child: TabBarView(
                 controller: _tabController,
                 physics: const NeverScrollableScrollPhysics(),
-                children: const [
-                  Center(child: Text("overview")),
-                  CalendarTab()
-                ],
+                children: [const OverviewTab(), const CalendarTab()],
               ),
             ),
           ],
@@ -211,6 +237,56 @@ class _CalendarTabState extends State<CalendarTab>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class OverviewTab extends StatefulWidget {
+  const OverviewTab({super.key});
+
+  @override
+  State<OverviewTab> createState() => _OverviewTabState();
+}
+
+class _OverviewTabState extends State<OverviewTab> {
+  ListWorkspaceViewModel listWorkspace = ListWorkspaceViewModel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: FutureBuilder<List<WorkspaceViewModel>?>(
+        future: listWorkspace.fetchWorkspaces(),
+        builder: (context, snapshot) {
+          print(snapshot.connectionState);
+          final data = snapshot.data;
+          if (snapshot.connectionState == ConnectionState.done) {
+            print(snapshot.hasData);
+            if (snapshot.hasData) {
+              return ListView.builder(
+                itemCount: data!.length,
+                itemBuilder: (context, index) {
+                  return Card(
+                    color: Colors.amber,
+                    elevation: 2,
+                    child: ListTile(
+                      title: Text(
+                          listWorkspace.workspaces![index].workspace!.name!),
+                      subtitle: Text(listWorkspace
+                          .workspaces![index].workspace!.description!),
+                      trailing: Text(listWorkspace
+                          .workspaces![index].workspace!.ownerId
+                          .toString()),
+                    ),
+                  );
+                },
+              );
+            }
+          } else if (snapshot.hasError) {
+            return Text('${snapshot.error}');
+          }
+          return const Center(child: CircularProgressIndicator());
+        },
       ),
     );
   }
